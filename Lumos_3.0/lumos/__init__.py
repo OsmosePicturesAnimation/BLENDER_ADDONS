@@ -126,10 +126,12 @@ def register():
 
 
 def unregister():
-    for cls in CLASSES:
+    # Unregister classes in reverse order
+    for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)
 
-    for tls in TOOLS:
+    # Unregister tools in reverse order
+    for tls in reversed(TOOLS):
         bpy.utils.unregister_tool(tls)
 
     # Remove keymaps

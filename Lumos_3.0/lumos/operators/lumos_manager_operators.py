@@ -17,9 +17,12 @@ class LUMOS_MANAGER_OT_AddLight(Operator):
     bl_options = {'UNDO'}
     
     type_: StringProperty()
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
     
     def execute(self,context):
-
         lumos = context.window_manager.lumos
         scn = context.scene
 
@@ -54,16 +57,16 @@ class LUMOS_MANAGER_OT_DeleteLight(Operator):
 
     light_name: bpy.props.StringProperty()
 
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
+
     def execute(self,context):
-        # lumos = context.window_manager.lumos
-                
         light = bpy.data.lights.get(self.light_name)
         bpy.data.lights.remove(light, do_unlink=True)
         for block in bpy.data.lights:
             if block.users == 0:
                 bpy.data.lights.remove(block)
-
-        # lumos.target_enabled = False
         return{'FINISHED'}
     
 #####################   SELECT LIGHT  ###################
@@ -75,12 +78,15 @@ class LUMOS_MANAGER_OT_SelectLight(Operator):
 
     light: bpy.props.StringProperty()
 
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
+
     def execute(self,context):
 
         bpy.ops.object.select_all(action='DESELECT')
         bpy.context.scene.objects[self.light].select_set(True)
         context.view_layer.objects.active = bpy.context.scene.objects[self.light]
-
         return{'FINISHED'}
     
    
@@ -92,6 +98,10 @@ class LUMOS_MANAGER_OT_LookThoughLight(Operator):
     bl_options = {'UNDO'}
 
     light: bpy.props.StringProperty()
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
     
     def execute(self,context):
 
@@ -108,8 +118,6 @@ class LUMOS_MANAGER_OT_LookThoughLight(Operator):
             else:
                 bpy.ops.view3d.view_camera()
                 context.space_data.lock_camera = False
-            
-        
         return{'FINISHED'}
     
     
@@ -122,11 +130,14 @@ class LUMOS_MANAGER_OT_Light_Visibility(Operator):
 
     light: bpy.props.StringProperty()
 
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
+
     def execute(self,context):
         
         light = bpy.context.scene.objects.get(self.light)
         light.hide_viewport = not light.hide_viewport
-       
         return{'FINISHED'}
     
     
@@ -137,11 +148,14 @@ class LUMOS_MANAGER_OT_All_Light_Visibility(Operator):
     
     visible: BoolProperty(default = True)
 
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
+
     def execute(self,context):
         for obj in context.scene.objects:
             if obj.type == 'LIGHT':
                 obj.hide_viewport = self.visible
-       
         return{'FINISHED'}
     
 #####################   ISOLATE LIGHT  ###################
@@ -152,6 +166,10 @@ class LUMOS_MANAGER_OT_IsolateLight(Operator):
     bl_options = {'UNDO'}
 
     light: bpy.props.StringProperty()
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
 
     def execute(self,context):
         
@@ -171,6 +189,14 @@ class LUMOS_MANAGER_OT_Light_Normals_Position(bpy.types.Operator):
     
     _timer = None
 
+    @classmethod
+    def poll(cls, context):
+        if context.space_data.type != 'VIEW_3D':
+            return False
+        if not context.active_object or context.active_object.type != 'LIGHT':
+            return False
+        return True
+
     def __init__(self):
         self._handle = None
         self.mouse_pos = (0, 0)
@@ -182,6 +208,9 @@ class LUMOS_MANAGER_OT_Light_Normals_Position(bpy.types.Operator):
             elif event.type == 'MOUSEMOVE':
                 self.mouse_pos = (event.mouse_region_x, event.mouse_region_y)
                 self.execute(context)
+            elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+                bpy.ops.ed.undo_push(message="Light Normal Position")
+                return self.cancel(context)
             elif event.type == "E":
                 bpy.ops.lumos_manager.light_modify_intensity_modal('INVOKE_DEFAULT')
                 return self.cancel(context)
@@ -191,9 +220,8 @@ class LUMOS_MANAGER_OT_Light_Normals_Position(bpy.types.Operator):
             elif event.type == "F":
                 bpy.ops.lumos_manager.light_modify_local_z_position_modal('INVOKE_DEFAULT')
                 return self.cancel(context)
-            elif event.type in {'ESC', 'LEFTMOUSE', 'ONE', 'THREE', 'FOUR'} and event.value == 'RELEASE':
+            elif event.type in {'ESC', 'ONE', 'THREE', 'FOUR'} and event.value == 'RELEASE':
                 return self.cancel(context)
-
             return {'RUNNING_MODAL'}
         else:
             return self.cancel(context)
@@ -229,7 +257,6 @@ class LUMOS_MANAGER_OT_Light_Normals_Position(bpy.types.Operator):
             light = context.active_object
             light.location = location + normal * distance
             light.rotation_euler = normal.to_track_quat('Z', 'Y').to_euler()
-
         return {'FINISHED'}
 
     def cancel(self, context):
@@ -247,9 +274,17 @@ class LUMOS_MANAGER_OT_Light_Reflection_Position(bpy.types.Operator):
 
     _timer = None
 
+    @classmethod
+    def poll(cls, context):
+        if context.space_data.type != 'VIEW_3D':
+            return False
+        if not context.active_object or context.active_object.type != 'LIGHT':
+            return False
+        return True
+
     def __init__(self):
         self._handle = None
-        self.mouse_pos = (0, 0)  # Position de la souris
+        self.mouse_pos = (0, 0)
         self.initial_distance = None
 
     def modal(self, context, event):
@@ -259,6 +294,9 @@ class LUMOS_MANAGER_OT_Light_Reflection_Position(bpy.types.Operator):
             elif event.type == 'MOUSEMOVE':
                 self.mouse_pos = (event.mouse_region_x, event.mouse_region_y)
                 self.execute(context)
+            elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+                bpy.ops.ed.undo_push(message="Light Reflection Position")
+                return self.cancel(context)
             elif event.type == "E":
                 bpy.ops.lumos_manager.light_modify_intensity_modal('INVOKE_DEFAULT')
                 return self.cancel(context)
@@ -268,9 +306,8 @@ class LUMOS_MANAGER_OT_Light_Reflection_Position(bpy.types.Operator):
             elif event.type == "F":
                 bpy.ops.lumos_manager.light_modify_local_z_position_modal('INVOKE_DEFAULT')
                 return self.cancel(context)
-            elif event.type in {'ESC', 'LEFTMOUSE', 'ONE', 'TWO', 'FOUR'} and event.value == 'RELEASE':
+            elif event.type in {'ESC', 'ONE', 'TWO', 'FOUR'} and event.value == 'RELEASE':
                 return self.cancel(context)
-
             return {'RUNNING_MODAL'}
         else:
             return self.cancel(context)
@@ -307,7 +344,6 @@ class LUMOS_MANAGER_OT_Light_Reflection_Position(bpy.types.Operator):
             reflection_vec = incident_vec.reflect(normal)
             light.location = location - reflection_vec * distance
             light.rotation_euler = (-reflection_vec).to_track_quat('Z', 'Y').to_euler()
-
         return {'FINISHED'}
     
     def cancel(self, context):
@@ -327,6 +363,14 @@ class LUMOS_MANAGER_OT_Light_Target_Position(bpy.types.Operator):
 
     _timer = None
 
+    @classmethod
+    def poll(cls, context):
+        if context.space_data.type != 'VIEW_3D':
+            return False
+        if not context.active_object or context.active_object.type != 'LIGHT':
+            return False
+        return True
+
     def __init__(self):
         self._handle = None
         self.mouse_pos = (0, 0)
@@ -339,6 +383,7 @@ class LUMOS_MANAGER_OT_Light_Target_Position(bpy.types.Operator):
             self.mouse_pos = (event.mouse_region_x, event.mouse_region_y)
         elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
             self.create_target(context, event)
+            bpy.ops.ed.undo_push(message="Light Target Position")
             bpy.ops.lumos_manager.light_shadow_modal('INVOKE_DEFAULT')
             return self.cancel(context)
         elif event.type in {'ESC', 'ONE', 'TWO', 'THREE'} and event.value == 'PRESS':
@@ -369,7 +414,7 @@ class LUMOS_MANAGER_OT_Light_Target_Position(bpy.types.Operator):
             empty = context.active_object
             empty.name = empty_name
             empty.show_name = True
-            empty.scale = (0.2, 0.2, 0.2)  # Set the size of the empty to 0.1
+            empty.scale = (0.2, 0.2, 0.2)  # Set the size of the empty to 0.2
             empty.select_set(False)
             context.scene.reference_empty = empty
 
@@ -392,6 +437,14 @@ class LUMOS_MANAGER_OT_Light_Shadow_Position(bpy.types.Operator):
     _light_object = None
     _reference_object = None
 
+    @classmethod
+    def poll(cls, context):
+        if context.space_data.type != 'VIEW_3D':
+            return False
+        if not context.active_object or context.active_object.type != 'LIGHT':
+            return False
+        return True
+
     def __init__(self):
         self._handle = None
         self.mouse_pos = (0, 0)
@@ -403,6 +456,9 @@ class LUMOS_MANAGER_OT_Light_Shadow_Position(bpy.types.Operator):
             if event.type == 'MOUSEMOVE':
                 self.mouse_pos = (event.mouse_region_x, event.mouse_region_y)
                 self.execute(context)
+            elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+                bpy.ops.ed.undo_push(message="Light Shadow Position")
+                return self.cancel(context)
             elif event.type == "E":
                 bpy.ops.lumos_manager.light_modify_intensity_modal('INVOKE_DEFAULT')
                 return self.cancel(context)
@@ -412,7 +468,7 @@ class LUMOS_MANAGER_OT_Light_Shadow_Position(bpy.types.Operator):
             elif event.type == "F":
                 bpy.ops.lumos_manager.light_modify_local_z_position_modal('INVOKE_DEFAULT')
                 return self.cancel(context)
-            elif event.type in {'ESC', 'LEFTMOUSE', 'ONE', 'TWO', 'THREE'} and event.value == 'PRESS':
+            elif event.type in {'ESC', 'ONE', 'TWO', 'THREE'} and event.value == 'PRESS':
                 return self.cancel(context)
             return {'RUNNING_MODAL'}
         else:
@@ -450,9 +506,8 @@ class LUMOS_MANAGER_OT_Light_Shadow_Position(bpy.types.Operator):
         context.window.cursor_modal_restore()
 
         if self._reference_object:
-            bpy.context.scene.objects.remove(self._reference_object, do_unlink=True)
+            bpy.data.objects.remove(self._reference_object, do_unlink=True)
             context.scene.reference_empty = None
-
         return {'CANCELLED'}
 
     def place_light(self, context, shadow_location, normal):
@@ -482,6 +537,14 @@ class LUMOS_MANAGER_OT_Light_Edit_Mode_Switcher(Operator):
     bl_description = "Operator to switch light edit mode with keymaps"
     bl_options = {'UNDO'}
 
+    @classmethod
+    def poll(cls, context):
+        if context.space_data.type != 'VIEW_3D':
+            return False
+        if not context.active_object or context.active_object.type != 'LIGHT':
+            return False
+        return True
+
     def update_mode(self, context):
         bpy.context.window_manager.lumos.light_position_mode_enum = self.mode
 
@@ -497,17 +560,14 @@ class LUMOS_MANAGER_OT_Light_Edit_Mode_Switcher(Operator):
     )
 
     def execute(self,context):
-
         lumos = context.window_manager.lumos
-        
-        # Vérifier qu'une lumière est sélectionnée
+
         if not context.object or context.object.type != 'LIGHT':
             self.report({'ERROR'}, "No light is selected")
             return {'CANCELLED'}
 
         self.update_mode(context)
         lumos.light_position_mode_enum = self.mode
-        # self.update_mode(context)
         self.report({'INFO'}, f"Light Position Mode set to: {self.mode}")
         return{'FINISHED'}
 
@@ -519,12 +579,19 @@ class LUMOS_MANAGER_OT_Light_Edit_Manager(Operator):
     bl_description = "You must select a light before activating the tool"
     bl_options = {'UNDO'}
 
+    @classmethod
+    def poll(cls, context):
+        if context.space_data.type != 'VIEW_3D':
+            return False
+        if not context.active_object or context.active_object.type != 'LIGHT':
+            return False
+        return True
+
     def execute(self,context):
         lumos = context.window_manager.lumos
 
         if context.active_object and context.active_object.type == 'LIGHT':
             if lumos.light_position_mode_enum == "EDIT":
-                pass
                 self.report({'INFO'}, "Edit Mode: Press LEFTCLICK, E, F or C")
 
             elif lumos.light_position_mode_enum == "NORMALS":
@@ -539,11 +606,17 @@ class LUMOS_MANAGER_OT_Light_Edit_Manager(Operator):
                 bpy.ops.lumos_manager.light_target_modal('INVOKE_DEFAULT')
                 self.report({'INFO'}, "Shadow Mode: Press LEFTCLICK, E, F or C")
             else:
-                self.report({'ERROR'}, "At least one light and/or on mode must be selected !")
+                self.report({'ERROR'}, "Invalid mode selected!")
             return{'FINISHED'}
-        else:
-             bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-             self.report({'ERROR'}, "YOU HAVE TO SELECT A LIGHT TO USE LIGHT EDIT TOOLS BACK TO SELECT BOX")
+        # If no light is selected, switch to select mode
+        elif not context.active_object or context.active_object.type != 'LIGHT':
+            # Allow user to select with a left click
+            bpy.ops.object.select_all(action='DESELECT')  # deselect all
+            self.report({'WARNING'}, "No light selected! Use Left Click to select a light.")
+
+            # Call selection operator as box select
+            # Return default selection mode
+            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         return{'FINISHED'}
     
 ######################## TOOL LIGHT EDIT (INTERFACE) ###############################
@@ -554,9 +627,6 @@ class LUMOS_MANAGER_TL_3DVIEW_Lumos_Light_Edit_Tool(WorkSpaceTool):
     bl_idname = "lumos_manager.light_edit tool"
     bl_label = "Lumos : Light Edit Tool"
     bl_description = "Tool to position light based on reflection"
-    # bl_icon = "ops.generic.select"
-    # bl_icon = "ops.light.edit"
-    # bl_icon =os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, "icons", "/ops.light.edit.dat"))
     bl_icon =str((Path(__file__).parent.parent / "icons" / "ops.light.edit").resolve())
     bl_widget = None
     bl_keymap = (
@@ -573,11 +643,7 @@ class LUMOS_MANAGER_TL_3DVIEW_Lumos_Light_Edit_Tool(WorkSpaceTool):
             layout.alert = True
         else:
             layout.prop(lumos, "light_position_mode_enum", expand=True)
-            # layout.separator()
             layout.prop(lumos, "preserve_energy")
-
-        
-
 
 ######################## MODIFY INTENSITY TOOL FOR LIGHT EDIT ###############################
 
@@ -585,6 +651,14 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Intensity(bpy.types.Operator):
     """Modal Operator To Modify Intensity By Moving Horizontaly"""
     bl_idname = "lumos_manager.light_modify_intensity_modal"
     bl_label = "Increase/Decrease Intensity"
+
+    @classmethod
+    def poll(cls, context):
+        if context.space_data.type != 'VIEW_3D':
+            return False
+        if not context.active_object or context.active_object.type != 'LIGHT':
+            return False
+        return True
     
     def __init__(self):
         self.start_mouse_x = 0
@@ -606,13 +680,13 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Intensity(bpy.types.Operator):
         elif event.type == "WHEELDOWNMOUSE":
             self.incremented_value = self.incremented_value / 10
             return {'RUNNING_MODAL'}
-        elif event.type =='LEFTMOUSE':
+        elif event.type =='LEFTMOUSE' and event.value == 'RELEASE':
+            bpy.ops.ed.undo_push(message="Light Intensity")
             context.window.cursor_modal_restore()
-            return {'CANCELLED'}
+            return {'FINISHED'}
         elif event.type in {'ESC', 'RIGHTMOUSE'}:
             context.window.cursor_modal_restore()
             return {'CANCELLED'}
-        
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
@@ -635,6 +709,14 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Color(bpy.types.Operator):
     """Modal Operator To Modify Color By Moving Horizontaly"""
     bl_idname = "lumos_manager.light_modify_color_modal"
     bl_label = "Modify Color Hue"
+
+    @classmethod
+    def poll(cls, context):
+        if context.space_data.type != 'VIEW_3D':
+            return False
+        if not context.active_object or context.active_object.type != 'LIGHT':
+            return False
+        return True
 
     def __init__(self):
         self.start_mouse_x = 0
@@ -696,12 +778,12 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Color(bpy.types.Operator):
             context.object.data.color = rgb
             return {'RUNNING_MODAL'}
         
-        elif event.type =='LEFTMOUSE':
+        elif event.type =='LEFTMOUSE' and event.value == 'RELEASE':
+            bpy.ops.ed.undo_push(message="Light Color")
             context.window.cursor_modal_restore()
             wm.lumos_gizmo_active = False # Restore the custom gizmo state
             if context.area and context.area.type == 'VIEW_3D':
                 context.area.tag_redraw()  # Forcer le rafraîchissement de la vue
-
             return {'FINISHED'}
         
         elif event.type in {'RIGHTMOUSE', 'ESC'}:
@@ -744,6 +826,14 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_LocalZPosition(bpy.types.Operator):
     bl_idname = "lumos_manager.light_modify_local_z_position_modal"
     bl_label = "Modify Z Local Position"
 
+    @classmethod
+    def poll(cls, context):
+        if context.space_data.type != 'VIEW_3D':
+            return False
+        if not context.active_object or context.active_object.type != 'LIGHT':
+            return False
+        return True
+
     def __init__(self):
         self.start_mouse_x = 0
         self.start_location = None
@@ -768,7 +858,11 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_LocalZPosition(bpy.types.Operator):
                 distance_ratio = (self.initial_distance / new_distance) ** 2
                 context.object.data.energy = self.initial_energy / distance_ratio
             return {'RUNNING_MODAL'}
-        elif event.type in {'ESC', 'LEFTMOUSE', 'RIGHTMOUSE'}:
+        elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+            bpy.ops.ed.undo_push(message="Light Z Position")
+            context.window.cursor_modal_restore()
+            return {'FINISHED'}
+        elif event.type in {'ESC', 'RIGHTMOUSE'}:
             context.window.cursor_modal_restore()
             return {'CANCELLED'}
         
@@ -803,7 +897,6 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_LocalZPosition(bpy.types.Operator):
             self.report({'WARNING'}, "No active light object found")
             return {'CANCELLED'}
         
-
 ######################## OPERATOR TO CONTROL THE TOOL TOGGLE (L) ###############################
 
 class LUMOS_MANAGER_OT_Light_Edit_Tool_Toggle(bpy.types.Operator):
@@ -812,6 +905,10 @@ class LUMOS_MANAGER_OT_Light_Edit_Tool_Toggle(bpy.types.Operator):
     bl_label = "Controle Light Edit Tool Toggle"
 
     light: bpy.props.StringProperty()
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
 
     def execute(self,context):
         current_mode = bpy.context.mode #Return the current mode (OBJECT, EDIT_MESH, SCULPT, POSE, etc)

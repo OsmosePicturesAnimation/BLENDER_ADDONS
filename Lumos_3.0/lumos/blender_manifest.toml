@@ -16,7 +16,7 @@ schema_version = "1.0.0"
 # Example of manifest file for a Blender extension
 # Change the values according to your extension
 id = "lumos"
-version = "3.0.1"
+version = "3.0.3"
 name = "Lumos"
 tagline = "Bring your lighting to the next level"
 maintainer = "Quentin 'Eqkoss/Tintin' Sanhes <eqkoss@gmail.com>"
@@ -47,7 +47,7 @@ license = [
 # ]
 
 # # Optional: list of supported platforms. If omitted, the extension will be available in all operating systems.
-# platforms = ["windows-x64", "macos-arm64", "linux-x64"]
+# platforms = ["windows-x64", "windows-arm64", "macos-arm64", "macos-x64", "linux-x64"]
 # # Other supported platforms: "windows-arm64", "macos-x64"
 
 # # Optional: bundle 3rd party Python modules.

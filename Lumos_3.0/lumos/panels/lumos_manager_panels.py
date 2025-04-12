@@ -1,6 +1,4 @@
 import bpy
-import bgl
-import blf
 
 from bpy.types import Panel, Menu, PropertyGroup, Operator, UIList, WorkSpaceTool
 from bpy.props import EnumProperty, StringProperty, BoolProperty, PointerProperty
@@ -56,7 +54,12 @@ class LUMOS_MANAGER_PT_3DVIEW_Lumos_Manager(Panel):
 
         # row=layout.row()
         # row.prop(scene, "lumos_target_collection")
-        row = layout.box()
+        '''
+        Originally use the layout.box to hack the interface and only use it to draw a visual 'line separator
+        as the layout.separator(type="LINE") seems to not work in panels.
+        # row = layout.box()
+        # row.separator(type="LINE")
+        '''
         
         row = layout.row()
         row.alignment = 'CENTER'

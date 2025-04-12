@@ -9,6 +9,10 @@ class LUMOS_EDITOR_OT_PopUpMenu(Operator):
     bl_idname = "lumos_editor.popupmenu"
     bl_description = "Ouvre un menu popup afin de facilité la modification des lights de la scène"
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
                     
     def draw(self, context):
         lumos = context.window_manager.lumos
