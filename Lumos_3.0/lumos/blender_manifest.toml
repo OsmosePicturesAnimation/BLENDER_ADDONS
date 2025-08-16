@@ -16,7 +16,7 @@ schema_version = "1.0.0"
 # Example of manifest file for a Blender extension
 # Change the values according to your extension
 id = "lumos"
-version = "3.0.3"
+version = "3.0.4"
 name = "Lumos"
 tagline = "Bring your lighting to the next level"
 maintainer = "Quentin 'Eqkoss/Tintin' Sanhes <eqkoss@gmail.com>"
@@ -85,4 +85,5 @@ license = [
 #   "__pycache__/",
 #   "/.git/",
 #   "/*.zip",
+
 # ]
