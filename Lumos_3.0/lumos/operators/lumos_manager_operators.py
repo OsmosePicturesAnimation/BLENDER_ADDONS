@@ -1,6 +1,5 @@
 import bpy
 import colorsys
-import bgl
 import os
 
 from mathutils import Vector
@@ -921,4 +920,5 @@ class LUMOS_MANAGER_OT_Light_Edit_Tool_Toggle(bpy.types.Operator):
                 bpy.ops.wm.tool_set_by_id(name=old_tool)
             else:
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+
         return{'FINISHED'}
