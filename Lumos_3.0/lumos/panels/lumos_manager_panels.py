@@ -41,14 +41,18 @@ class LUMOS_MANAGER_PT_3DVIEW_Lumos_Manager(Panel):
         lumos = context.window_manager.lumos
         scene = context.scene
         lights = [lights for lights in scene.objects if lights.type == "LIGHT"]
+        emissive_objects = [obj for obj in scene.objects if obj.type == 'MESH' and lumos.is_emissive_object(obj)]
         selligs = [selligs for selligs in bpy.context.selected_objects if selligs.type == "LIGHT"]
+        selemis = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH' and lumos.is_emissive_object(obj)]
 
         LIGHTS = ('POINT', 'SUN', 'SPOT', 'AREA')
                 
         row = layout.row()
         row.alignment = 'CENTER'
         row.label(text = "LIGHT CREATOR :", icon = "OUTLINER_OB_LIGHT")
-        
+        row.separator()
+        row.separator()
+
         row=layout.row()
         row.prop(scene, "lumos_light_collection")
 
@@ -83,10 +87,13 @@ class LUMOS_MANAGER_PT_3DVIEW_Lumos_Manager(Panel):
 
         totlig = len(lights)
         sellig = len(selligs)
+        totemis = len(emissive_objects)
+        selemiscount = len(selemis)
 
         row = layout.row(align=True)
         row.alignment = 'CENTER'
-        row.label(text=f"Light List : {sellig}|{totlig}", icon="LIGHT")
+        row.label(text=f"Lights: {sellig}|{totlig}", icon="LIGHT")
+        row.label(text=f"Emissive: {selemiscount}|{totemis}", icon="MATERIAL")
         
         row = layout.row()
         row.operator('lumos_manager.all_light_visibility', text="Show All", icon='HIDE_OFF').visible = False
@@ -103,18 +110,40 @@ class LUMOS_MANAGER_UL_Ui_list(UIList):
         scene = context.scene
         obj = item
         row = layout.row(align=True)
-        col_row = row.row(align=True)
-        col_row.scale_x = .3
-        col_row.prop(obj.data, 'color', text='')
-        col_row.separator(factor=2.0)
+        
+        if obj.type == 'LIGHT':
+            # Draw light objects as before
+            col_row = row.row(align=True)
+            col_row.scale_x = .3
+            col_row.prop(obj.data, 'color', text='')
+            col_row.separator(factor=2.0)
 
-        row.operator("lumos_manager.lookthrough_light", text="", icon='OUTLINER_OB_CAMERA' if scene.camera == obj else "CAMERA_DATA").light = obj.name
-        row.operator("lumos_manager.light_visibility", text="", icon="HIDE_OFF" if not obj.hide_viewport else 'HIDE_ON').light = obj.name
-        row.operator("lumos_manager.isolate_light", text="", icon="PMARKER_ACT").light = obj.name
-        row.operator("lumos_manager.select_light", text=obj.name).light = obj.name
-        row.prop(bpy.data.lights[obj.data.name], 'lumos_lock_light', text="", icon='LOCKED' if is_locked(obj) else 'UNLOCKED')
-        row.separator()
-        row.operator("lumos_manager.delete_light", text="", icon="PANEL_CLOSE").light_name = obj.data.name
+            row.operator("lumos_manager.lookthrough_light", text="", icon='OUTLINER_OB_CAMERA' if scene.camera == obj else "CAMERA_DATA").light = obj.name
+            row.operator("lumos_manager.light_visibility", text="", icon="HIDE_OFF" if not obj.hide_viewport else 'HIDE_ON').light = obj.name
+            row.operator("lumos_manager.isolate_light", text="", icon="PMARKER_ACT").light = obj.name
+            row.operator("lumos_manager.select_light", text=obj.name).light = obj.name
+            row.prop(bpy.data.lights[obj.data.name], 'lumos_lock_light', text="", icon='LOCKED' if is_locked(obj) else 'UNLOCKED')
+            row.separator()
+            row.operator("lumos_manager.delete_light", text="", icon="PANEL_CLOSE").light_name = obj.data.name
+        
+        elif obj.type == 'MESH' and lumos.is_emissive_object(obj):
+            # Draw emissive objects
+            col_row = row.row(align=True)
+            col_row.scale_x = .3
+            # Direct access to emission color
+            emission_inputs = lumos.get_emission_node_inputs(obj)
+            if emission_inputs and emission_inputs['color']:
+                col_row.prop(emission_inputs['color'], 'default_value', text='')
+            col_row.separator(factor=2.0)
+
+            row.operator("lumos_manager.lookthrough_light", text="", icon='OUTLINER_OB_CAMERA' if scene.camera == obj else "CAMERA_DATA").light = obj.name
+            row.operator("lumos_manager.light_visibility", text="", icon="HIDE_OFF" if not obj.hide_viewport else 'HIDE_ON').light = obj.name
+            row.operator("lumos_manager.isolate_light", text="", icon="PMARKER_ACT").light = obj.name
+            row.operator("lumos_manager.select_light", text=obj.name).light = obj.name
+            row.prop(obj, 'lumos_lock_object', text="", icon='LOCKED' if is_locked(obj) else 'UNLOCKED')
+            row.separator()
+            row.operator("lumos_manager.delete_emissive_object", text="", icon="PANEL_CLOSE").object_name = obj.name
+
         # row.operator("lumos_manager.create_target", text="", icon="CON_TRACKTO").light_name = obj.data.name
         # row.operator('lumos_manager.delete_target', text="", icon="CANCEL").light_name = obj.data.name
 
@@ -141,9 +170,10 @@ class LUMOS_MANAGER_UL_Ui_list(UIList):
         if self.use_filter_sort_alpha:
             flt_neworder = helper_funcs.sort_items_by_name(objects, "name")
 
-        # Filter type.
+        # Filter type - include both lights and emissive objects.
+        lumos = context.window_manager.lumos
         for idx, obj in enumerate(objects):
-            if obj.type != "LIGHT":
+            if obj.type != "LIGHT" and not (obj.type == 'MESH' and lumos.is_emissive_object(obj)):
                 flt_flags[idx] |= 1 << 0
                 flt_flags[idx] &= ~self.bitflag_filter_item
 
@@ -196,6 +226,26 @@ class LUMOS_MANAGER_PT_3DVIEW_Lumos_Manager_Modificator(Panel):
                 #     box1 = box.box()
                 #     box1.label(text = "Target :     " + obj.constraints['Aim Target'].target.name)
                       
+        # Handle emissive objects
+        lumos = context.window_manager.lumos
+        for obj in bpy.context.selected_objects:
+            if obj.type == 'MESH' and lumos.is_emissive_object(obj):
+                box = layout.box()
+                row = box.row()
+                row.alignment = "CENTER"
+                row.label(text = f"{obj.name} (Emissive)", icon='MATERIAL')
+                box1 = box.box()
+                
+                # Direct access to emission properties
+                emission_inputs = lumos.get_emission_node_inputs(obj)
+                if emission_inputs:
+                    if emission_inputs['color']:
+                        row = box1.row(align=True)
+                        row.prop(emission_inputs['color'], 'default_value', text="Emission Color")
+                    
+                    if emission_inputs['strength']:
+                        row = box1.row(align=True)
+                        row.prop(emission_inputs['strength'], 'default_value', text="Emission Strength")
     
 ######################## PIE MENU LIGHT ###############################
 

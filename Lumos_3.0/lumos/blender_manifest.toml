@@ -16,7 +16,7 @@ schema_version = "1.0.0"
 # Example of manifest file for a Blender extension
 # Change the values according to your extension
 id = "lumos"
-version = "3.0.5"
+version = "3.1.0"
 name = "Lumos"
 tagline = "Bring your lighting to the next level"
 maintainer = "Quentin 'Eqkoss/Tintin' Sanhes <eqkoss@gmail.com>"
@@ -33,7 +33,7 @@ tags = ["Lighting", "3D View"]
 blender_version_min = "4.2.0"
 # # Optional: Blender version that the extension does not support, earlier versions are supported.
 # # This can be omitted and defined later on the extensions platform if an issue is found.
-blender_version_max = "5.1.0"
+# blender_version_max = "5.1.0"
 
 # License conforming to https://spdx.org/licenses/ (use "SPDX: prefix)
 # https://docs.blender.org/manual/en/dev/advanced/extensions/licenses.html
@@ -85,6 +85,4 @@ license = [
 #   "__pycache__/",
 #   "/.git/",
 #   "/*.zip",
-
 # ]
-

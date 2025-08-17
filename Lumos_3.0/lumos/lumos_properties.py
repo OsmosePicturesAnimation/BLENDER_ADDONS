@@ -57,6 +57,14 @@ class LUMOS_Properties(PropertyGroup):
         default = False,
     )
     
+    emission_strength_temp : bpy.props.FloatProperty(
+        name = "Emission Strength",
+        description = "Temporary property for emission strength editing",
+        default = 1.0,
+        min = 0.0,
+        max = 1000.0,
+    )
+    
 #######################################################################         
 ######################## LIGHT TYPE FILTER ############################
 #######################################################################    
@@ -84,6 +92,11 @@ class LUMOS_Properties(PropertyGroup):
     area_light_filter : BoolProperty(
     name="Filter Area Light",
     description="Show only Area lights",
+    default = False)
+    
+    emissive_filter : BoolProperty(
+    name="Filter Emissive Objects",
+    description="Show only objects with emissive materials",
     default = False)
     
 #######################################################################         
@@ -146,3 +159,162 @@ class LUMOS_Properties(PropertyGroup):
     def searcher(self, origin, target):
         if origin.casefold() in target.casefold():
             return True
+    
+    # Function to check if an object has emissive materials
+    def is_emissive_object(self, obj):
+        if not obj.material_slots:
+            return False
+        
+        for slot in obj.material_slots:
+            if slot.material and slot.material.use_nodes:
+                for node in slot.material.node_tree.nodes:
+                    if node.type == 'EMISSION':
+                        # For emission shader, check both color and strength
+                        color_input = node.inputs.get('Color')
+                        strength_input = node.inputs.get('Strength')
+                        
+                        # Check if emission color is not black
+                        color_not_black = False
+                        if color_input and hasattr(color_input, 'default_value'):
+                            color = color_input.default_value
+                            if len(color) >= 3 and (color[0] > 0 or color[1] > 0 or color[2] > 0):
+                                color_not_black = True
+                        
+                        # Check if emission strength > 0
+                        strength_positive = False
+                        if strength_input and strength_input.default_value > 0:
+                            strength_positive = True
+                            
+                        # Both conditions must be true
+                        if color_not_black and strength_positive:
+                            return True
+                            
+                    # Check for Principled BSDF with emission
+                    elif node.type == 'BSDF_PRINCIPLED':
+                        emission_strength = node.inputs.get('Emission Strength')
+                        emission_color = node.inputs.get('Emission Color') or node.inputs.get('Emission')
+                        
+                        # Check if emission strength > 0
+                        strength_positive = False
+                        if emission_strength and emission_strength.default_value > 0:
+                            strength_positive = True
+                        
+                        # Check if emission color is not black
+                        color_not_black = False
+                        if emission_color and hasattr(emission_color, 'default_value'):
+                            color = emission_color.default_value
+                            if len(color) >= 3 and (color[0] > 0 or color[1] > 0 or color[2] > 0):
+                                color_not_black = True
+                        
+                        # Both conditions must be true for Principled BSDF
+                        if color_not_black and strength_positive:
+                            return True
+        return False
+    
+    # Function to get emission strength from an emissive object
+    def get_emission_strength(self, obj):
+        if not obj.material_slots:
+            return 0.0
+        
+        for slot in obj.material_slots:
+            if slot.material and slot.material.use_nodes:
+                for node in slot.material.node_tree.nodes:
+                    if node.type == 'EMISSION':
+                        strength_input = node.inputs.get('Strength')
+                        if strength_input:
+                            return strength_input.default_value
+                    # Check for Principled BSDF with emission
+                    if node.type == 'BSDF_PRINCIPLED':
+                        emission_strength = node.inputs.get('Emission Strength')
+                        if emission_strength and emission_strength.default_value > 0:
+                            return emission_strength.default_value
+        return 0.0
+    
+    # Function to set emission strength for an emissive object  
+    def set_emission_strength(self, obj, strength):
+        if not obj.material_slots:
+            return False
+        
+        for slot in obj.material_slots:
+            if slot.material and slot.material.use_nodes:
+                for node in slot.material.node_tree.nodes:
+                    if node.type == 'EMISSION':
+                        strength_input = node.inputs.get('Strength')
+                        if strength_input:
+                            strength_input.default_value = strength
+                            return True
+                    # Set emission strength for Principled BSDF
+                    if node.type == 'BSDF_PRINCIPLED':
+                        emission_strength = node.inputs.get('Emission Strength')
+                        if emission_strength:
+                            emission_strength.default_value = strength
+                            return True
+        return False
+    
+    # Function to get emission color from an emissive object
+    def get_emission_color(self, obj):
+        if not obj.material_slots:
+            return (1.0, 1.0, 1.0)  # Default white
+        
+        for slot in obj.material_slots:
+            if slot.material and slot.material.use_nodes:
+                for node in slot.material.node_tree.nodes:
+                    if node.type == 'EMISSION':
+                        color_input = node.inputs.get('Color')
+                        if color_input and hasattr(color_input, 'default_value'):
+                            return color_input.default_value[:3]  # RGB only
+                    # Check for Principled BSDF with emission
+                    if node.type == 'BSDF_PRINCIPLED':
+                        emission_color = node.inputs.get('Emission Color') or node.inputs.get('Emission')
+                        if emission_color and hasattr(emission_color, 'default_value'):
+                            return emission_color.default_value[:3]  # RGB only
+        return (1.0, 1.0, 1.0)  # Default white
+    
+    # Function to set emission color for an emissive object
+    def set_emission_color(self, obj, color):
+        if not obj.material_slots:
+            return False
+        
+        for slot in obj.material_slots:
+            if slot.material and slot.material.use_nodes:
+                for node in slot.material.node_tree.nodes:
+                    if node.type == 'EMISSION':
+                        color_input = node.inputs.get('Color')
+                        if color_input:
+                            color_input.default_value = (*color, 1.0)  # RGB + Alpha
+                            return True
+                    # Set emission color for Principled BSDF
+                    if node.type == 'BSDF_PRINCIPLED':
+                        emission_color = node.inputs.get('Emission Color') or node.inputs.get('Emission')
+                        if emission_color:
+                            emission_color.default_value = (*color, 1.0)  # RGB + Alpha
+                            return True
+        return False
+    
+    # Function to get direct access to emission node inputs for an object
+    def get_emission_node_inputs(self, obj):
+        """Returns a dict with direct references to emission node inputs"""
+        if not obj.material_slots:
+            return None
+        
+        for slot in obj.material_slots:
+            if slot.material and slot.material.use_nodes:
+                for node in slot.material.node_tree.nodes:
+                    if node.type == 'EMISSION':
+                        return {
+                            'color': node.inputs.get('Color'),
+                            'strength': node.inputs.get('Strength'),
+                            'node': node,
+                            'type': 'EMISSION'
+                        }
+                    elif node.type == 'BSDF_PRINCIPLED':
+                        emission_strength = node.inputs.get('Emission Strength')
+                        emission_color = node.inputs.get('Emission Color') or node.inputs.get('Emission')
+                        if emission_strength or emission_color:
+                            return {
+                                'color': emission_color,
+                                'strength': emission_strength,
+                                'node': node,
+                                'type': 'PRINCIPLED'
+                            }
+        return None

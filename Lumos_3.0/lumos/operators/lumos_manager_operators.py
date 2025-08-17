@@ -196,9 +196,6 @@ class LUMOS_MANAGER_OT_Light_Normals_Position(bpy.types.Operator):
             return False
         return True
 
-    def __init__(self):
-        self._handle = None
-        self.mouse_pos = (0, 0)
 
     def modal(self, context, event):
         if context.active_object.type == 'LIGHT':
@@ -226,6 +223,10 @@ class LUMOS_MANAGER_OT_Light_Normals_Position(bpy.types.Operator):
             return self.cancel(context)
 
     def invoke(self, context, event):
+        # Initialize variables
+        self._handle = None
+        self.mouse_pos = (0, 0)
+        
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, window=context.window)
         if context.space_data.type == 'VIEW_3D' and context.active_object and context.active_object.type == 'LIGHT':
@@ -281,9 +282,6 @@ class LUMOS_MANAGER_OT_Light_Reflection_Position(bpy.types.Operator):
             return False
         return True
 
-    def __init__(self):
-        self._handle = None
-        self.mouse_pos = (0, 0)
         self.initial_distance = None
 
     def modal(self, context, event):
@@ -313,6 +311,10 @@ class LUMOS_MANAGER_OT_Light_Reflection_Position(bpy.types.Operator):
         
 
     def invoke(self, context, event):
+        # Initialize variables
+        self._handle = None
+        self.mouse_pos = (0, 0)
+        
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, window=context.window)
         if context.space_data.type == 'VIEW_3D' and context.active_object and context.active_object.type == 'LIGHT':
@@ -370,9 +372,6 @@ class LUMOS_MANAGER_OT_Light_Target_Position(bpy.types.Operator):
             return False
         return True
 
-    def __init__(self):
-        self._handle = None
-        self.mouse_pos = (0, 0)
         self._light_object = None
 
     def modal(self, context, event):
@@ -444,9 +443,6 @@ class LUMOS_MANAGER_OT_Light_Shadow_Position(bpy.types.Operator):
             return False
         return True
 
-    def __init__(self):
-        self._handle = None
-        self.mouse_pos = (0, 0)
 
     def modal(self, context, event):
         if event.type in {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
@@ -474,6 +470,9 @@ class LUMOS_MANAGER_OT_Light_Shadow_Position(bpy.types.Operator):
             return self.cancel(context)
 
     def invoke(self, context, event):
+        # Initialize variables
+        self.mouse_pos = (0, 0)
+        
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, window=context.window)
         context.window.cursor_modal_set('CROSSHAIR')
@@ -655,14 +654,16 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Intensity(bpy.types.Operator):
     def poll(cls, context):
         if context.space_data.type != 'VIEW_3D':
             return False
-        if not context.active_object or context.active_object.type != 'LIGHT':
+        if not context.active_object:
             return False
-        return True
+        lumos = context.window_manager.lumos
+        # Accept both lights and emissive objects
+        if context.active_object.type == 'LIGHT':
+            return True
+        elif context.active_object.type == 'MESH' and lumos.is_emissive_object(context.active_object):
+            return True
+        return False
     
-    def __init__(self):
-        self.start_mouse_x = 0
-        self.initial_intensity = 0
-        self.incremented_value = 10
     
     def modal(self, context, event):
         if event.type in {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
@@ -670,8 +671,16 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Intensity(bpy.types.Operator):
         # incremented_value_list = [0.01, 0.1, 0.25, 0.5, 1, 10, 100, 10e00]
         elif event.type == 'MOUSEMOVE':
             delta_x = event.mouse_x - self.start_mouse_x
-            # Adjust the intensity based on mouse movement
-            context.object.data.energy = self.initial_intensity + delta_x * self.incremented_value
+            new_intensity = self.initial_intensity + delta_x * self.incremented_value
+            
+            # Apply intensity change based on object type
+            if self.is_emissive_object and self.emission_inputs:
+                # For emissive objects, modify the emission strength
+                if self.emission_inputs['strength']:
+                    self.emission_inputs['strength'].default_value = max(0, new_intensity)
+            else:
+                # For lights, modify the light energy
+                context.object.data.energy = new_intensity
             return {'RUNNING_MODAL'}
         elif event.type == "WHEELUPMOUSE":
             self.incremented_value = self.incremented_value * 10
@@ -689,17 +698,45 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Intensity(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
-        if context.object and context.object.type == 'LIGHT':
-            self.start_mouse_x = event.mouse_x
-            self.initial_intensity = context.object.data.energy
-            context.window.cursor_modal_set('MOVE_X')
-            context.window_manager.modal_handler_add(self)
-            self.report({'INFO'}, "Move horizontally to modify the intensy")
-            return {'RUNNING_MODAL'}
-        else:
-            context.window.cursor_modal_restore()
-            self.report({'WARNING'}, "No active light object found")
-            return {'CANCELLED'}
+        lumos = context.window_manager.lumos
+        
+        # Initialize all variables
+        self.start_mouse_x = 0
+        self.initial_intensity = 0
+        self.incremented_value = 10
+        self.is_emissive_object = False
+        self.emission_inputs = None
+        
+        if context.object:
+            if context.object.type == 'LIGHT':
+                # Handle light objects
+                self.is_emissive_object = False
+                self.start_mouse_x = event.mouse_x
+                self.initial_intensity = context.object.data.energy
+                context.window.cursor_modal_set('MOVE_X')
+                context.window_manager.modal_handler_add(self)
+                self.report({'INFO'}, "Move horizontally to modify the intensity")
+                return {'RUNNING_MODAL'}
+                
+            elif context.object.type == 'MESH' and lumos.is_emissive_object(context.object):
+                # Handle emissive objects
+                self.is_emissive_object = True
+                self.emission_inputs = lumos.get_emission_node_inputs(context.object)
+                
+                if self.emission_inputs and self.emission_inputs['strength']:
+                    self.start_mouse_x = event.mouse_x
+                    self.initial_intensity = self.emission_inputs['strength'].default_value
+                    context.window.cursor_modal_set('MOVE_X')
+                    context.window_manager.modal_handler_add(self)
+                    self.report({'INFO'}, "Move horizontally to modify the emission strength")
+                    return {'RUNNING_MODAL'}
+                else:
+                    self.report({'WARNING'}, "No emission strength found on this object")
+                    return {'CANCELLED'}
+        
+        context.window.cursor_modal_restore()
+        self.report({'WARNING'}, "No active light or emissive object found")
+        return {'CANCELLED'}
         
 
 ######################## MODIFY COLOR TOOL FOR LIGHT EDIT ###############################
@@ -713,19 +750,16 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Color(bpy.types.Operator):
     def poll(cls, context):
         if context.space_data.type != 'VIEW_3D':
             return False
-        if not context.active_object or context.active_object.type != 'LIGHT':
+        if not context.active_object:
             return False
-        return True
+        lumos = context.window_manager.lumos
+        # Accept both lights and emissive objects
+        if context.active_object.type == 'LIGHT':
+            return True
+        elif context.active_object.type == 'MESH' and lumos.is_emissive_object(context.active_object):
+            return True
+        return False
 
-    def __init__(self):
-        self.start_mouse_x = 0
-        self.start_mouse_y = 0
-        self.initial_hue = 0
-        self.initial_saturation = 0
-        self.incremented_value = 0.001
-        self.incremented_saturation = 0.001
-        self.lock_x = False
-        self.lock_y = False
 
     def update_cursor(self, context):
         """Update cursor appearance based on the lock state."""
@@ -774,7 +808,15 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Color(bpy.types.Operator):
 
             # Convert HSV back to RGB
             rgb = colorsys.hsv_to_rgb(new_hue, new_saturation, self.initial_value)
-            context.object.data.color = rgb
+            
+            # Apply color change based on object type
+            if self.is_emissive_object and self.emission_inputs:
+                # For emissive objects, modify the emission color
+                if self.emission_inputs['color']:
+                    self.emission_inputs['color'].default_value = (*rgb, 1.0)
+            else:
+                # For lights, modify the light color
+                context.object.data.color = rgb
             return {'RUNNING_MODAL'}
         
         elif event.type =='LEFTMOUSE' and event.value == 'RELEASE':
@@ -796,26 +838,66 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Color(bpy.types.Operator):
 
     def invoke(self, context, event):
         wm = context.window_manager
+        lumos = wm.lumos
 
-        if context.object and context.object.type == 'LIGHT':
-            # Initiate the custom gizmo state
-            wm.lumos_gizmo_active = True
+        # Initialize all variables
+        self.start_mouse_x = 0
+        self.start_mouse_y = 0
+        self.initial_hue = 0
+        self.initial_saturation = 0
+        self.initial_value = 0
+        self.incremented_value = 0.001
+        self.incremented_saturation = 0.001
+        self.lock_x = False
+        self.lock_y = False
+        self.is_emissive_object = False
+        self.emission_inputs = None
 
-            self.start_mouse_x = event.mouse_x
-            self.start_mouse_y = event.mouse_y
-            
-            rgb = context.object.data.color
-            hsv = colorsys.rgb_to_hsv(rgb[0], rgb[1], rgb[2])
-            self.initial_hue, self.initial_saturation, self.initial_value = hsv
-            
-            bpy.ops.wm.tool_set_by_id(name="LUMOS_GIZMOGROUP_circle")
-            context.window.cursor_modal_set('SCROLL_XY')
-            wm.modal_handler_add(self)
-            self.report({'INFO'}, "Horizontal modify Hue, Vertical modify Saturation")
-            return {'RUNNING_MODAL'}
-        else:
-            self.report({'WARNING'}, "No active light object found")
-            return {'CANCELLED'}
+        if context.object:
+            if context.object.type == 'LIGHT':
+                # Handle light objects
+                self.is_emissive_object = False
+                wm.lumos_gizmo_active = True
+                
+                self.start_mouse_x = event.mouse_x
+                self.start_mouse_y = event.mouse_y
+                
+                rgb = context.object.data.color
+                hsv = colorsys.rgb_to_hsv(rgb[0], rgb[1], rgb[2])
+                self.initial_hue, self.initial_saturation, self.initial_value = hsv
+                
+                bpy.ops.wm.tool_set_by_id(name="LUMOS_GIZMOGROUP_circle")
+                context.window.cursor_modal_set('SCROLL_XY')
+                wm.modal_handler_add(self)
+                self.report({'INFO'}, "Horizontal modify Hue, Vertical modify Saturation")
+                return {'RUNNING_MODAL'}
+                
+            elif context.object.type == 'MESH' and lumos.is_emissive_object(context.object):
+                # Handle emissive objects
+                self.is_emissive_object = True
+                self.emission_inputs = lumos.get_emission_node_inputs(context.object)
+                
+                if self.emission_inputs and self.emission_inputs['color']:
+                    wm.lumos_gizmo_active = True
+                    
+                    self.start_mouse_x = event.mouse_x
+                    self.start_mouse_y = event.mouse_y
+                    
+                    # Get current emission color
+                    rgb = self.emission_inputs['color'].default_value[:3]
+                    hsv = colorsys.rgb_to_hsv(rgb[0], rgb[1], rgb[2])
+                    self.initial_hue, self.initial_saturation, self.initial_value = hsv
+                    
+                    context.window.cursor_modal_set('SCROLL_XY')
+                    wm.modal_handler_add(self)
+                    self.report({'INFO'}, "Horizontal modify Hue, Vertical modify Saturation")
+                    return {'RUNNING_MODAL'}
+                else:
+                    self.report({'WARNING'}, "No emission color found on this object")
+                    return {'CANCELLED'}
+        
+        self.report({'WARNING'}, "No active light or emissive object found")
+        return {'CANCELLED'}
         
 
 ######################## MODIFY Z POSITION TOOL FOR LIGHT EDIT ###############################
@@ -833,11 +915,6 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_LocalZPosition(bpy.types.Operator):
             return False
         return True
 
-    def __init__(self):
-        self.start_mouse_x = 0
-        self.start_location = None
-        self.initial_energy = None #Only use when lumos = context.window_manager.lumos is True
-        self.initial_distance = None #Only use when lumos = context.window_manager.lumos is True
 
     def modal(self, context, event):
         lumos = context.window_manager.lumos
@@ -920,5 +997,101 @@ class LUMOS_MANAGER_OT_Light_Edit_Tool_Toggle(bpy.types.Operator):
                 bpy.ops.wm.tool_set_by_id(name=old_tool)
             else:
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-
         return{'FINISHED'}
+
+######################## OPERATOR TO SET EMISSION STRENGTH ###############################
+
+class LUMOS_MANAGER_OT_Set_Emission_Strength(bpy.types.Operator):
+    """Operator to set emission strength for emissive objects"""
+    bl_idname = "lumos_manager.set_emission_strength"
+    bl_label = "Set Emission Strength"
+    bl_options = {'UNDO'}
+
+    object_name: bpy.props.StringProperty()
+    strength: bpy.props.FloatProperty(min=0.0, max=1000.0, default=1.0)
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
+
+    def execute(self, context):
+        lumos = context.window_manager.lumos
+        obj = bpy.data.objects.get(self.object_name)
+        if obj and lumos.set_emission_strength(obj, self.strength):
+            return {'FINISHED'}
+        else:
+            self.report({'ERROR'}, f"Failed to set emission strength for {self.object_name}")
+            return {'CANCELLED'}
+
+    def invoke(self, context, event):
+        obj = bpy.data.objects.get(self.object_name)
+        if obj:
+            lumos = context.window_manager.lumos
+            self.strength = lumos.get_emission_strength(obj)
+            return context.window_manager.invoke_props_dialog(self)
+        else:
+            return {'CANCELLED'}
+
+######################## OPERATOR TO SET EMISSION COLOR ###############################
+
+class LUMOS_MANAGER_OT_Set_Emission_Color(bpy.types.Operator):
+    """Operator to set emission color for emissive objects"""
+    bl_idname = "lumos_manager.set_emission_color"
+    bl_label = "Set Emission Color"
+    bl_options = {'UNDO'}
+
+    object_name: bpy.props.StringProperty()
+    color: bpy.props.FloatVectorProperty(
+        name="Emission Color",
+        subtype='COLOR',
+        size=3,
+        min=0.0,
+        max=1.0,
+        default=(1.0, 1.0, 1.0)
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
+
+    def execute(self, context):
+        lumos = context.window_manager.lumos
+        obj = bpy.data.objects.get(self.object_name)
+        if obj and lumos.set_emission_color(obj, self.color):
+            return {'FINISHED'}
+        else:
+            self.report({'ERROR'}, f"Failed to set emission color for {self.object_name}")
+            return {'CANCELLED'}
+
+    def invoke(self, context, event):
+        obj = bpy.data.objects.get(self.object_name)
+        if obj:
+            lumos = context.window_manager.lumos
+            self.color = lumos.get_emission_color(obj)
+            return context.window_manager.invoke_props_dialog(self)
+        else:
+            return {'CANCELLED'}
+
+######################## OPERATOR TO DELETE EMISSIVE OBJECT ###############################
+
+class LUMOS_MANAGER_OT_Delete_Emissive_Object(bpy.types.Operator):
+    """Delete an emissive object"""
+    bl_idname = "lumos_manager.delete_emissive_object"
+    bl_label = "Delete Emissive Object"
+    bl_options = {'UNDO'}
+
+    object_name: bpy.props.StringProperty()
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'VIEW_3D'
+
+    def execute(self, context):
+        obj = bpy.data.objects.get(self.object_name)
+        if obj:
+            # Remove object from scene
+            bpy.data.objects.remove(obj, do_unlink=True)
+            return {'FINISHED'}
+        else:
+            self.report({'ERROR'}, f"Object {self.object_name} not found")
+            return {'CANCELLED'}

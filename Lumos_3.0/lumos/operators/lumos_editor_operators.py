@@ -34,6 +34,7 @@ class LUMOS_EDITOR_OT_PopUpMenu(Operator):
         row.prop(lumos, "sun_light_filter", text="", icon='LIGHT_SUN')
         row.prop(lumos, "spot_light_filter", text="", icon='LIGHT_SPOT')
         row.prop(lumos, "area_light_filter", text="", icon='LIGHT_AREA')
+        row.prop(lumos, "emissive_filter", text="", icon='MATERIAL')
 
         row = layout.row()
         row.alignment = 'CENTER'
@@ -51,13 +52,24 @@ class LUMOS_EDITOR_OT_PopUpMenu(Operator):
 #######################################################################         
 ############################ PRESET ALL ###############################
 #######################################################################
-        if lumos.point_light_filter or lumos.sun_light_filter or lumos.spot_light_filter or lumos.area_light_filter:
-            lumos.all_light_filter = False
-        else:
+        # Smooth filter logic: all_light_filter is true when all specific filters are active,
+        # or when no specific filters are active (default state)
+        specific_filters = [lumos.point_light_filter, lumos.sun_light_filter, lumos.spot_light_filter, lumos.area_light_filter, lumos.emissive_filter]
+        active_filters = [f for f in specific_filters if f]
+        
+        if len(active_filters) == 0:
+            # No specific filters active: show all (all_light_filter = True)
             lumos.all_light_filter = True
+        elif len(active_filters) == len(specific_filters):
+            # All specific filters active: also show all (all_light_filter = True)
+            lumos.all_light_filter = True
+        else:
+            # Some but not all specific filters active: don't show all (all_light_filter = False)
+            lumos.all_light_filter = False
 
         if lumos.all_light_filter:   
             for lgt in context.scene.objects:
+                # Handle light objects
                 if lgt.type == 'LIGHT':
                     if lumos.searcher(lumos.search_filter, lgt.name):
                         row = layout.row(align = True)
@@ -123,6 +135,28 @@ class LUMOS_EDITOR_OT_PopUpMenu(Operator):
                                     row.separator(factor=1.0)
                                     row.prop(lgt.data, "size_y", text="Size Y")
                                     row.separator(factor=1.0)
+                
+                # Handle emissive objects
+                elif lgt.type == 'MESH' and lumos.is_emissive_object(lgt):
+                    if lumos.searcher(lumos.search_filter, lgt.name):
+                        row = layout.row(align = True)
+                        
+                        row.alignment = 'CENTER'
+                        row.prop(lgt, "name", text="", emboss = False)
+
+                        row.label(text="Emitor", icon='MATERIAL')
+                        row.separator(factor=1.0)
+                        
+                        # Direct access to emission properties
+                        emission_inputs = lumos.get_emission_node_inputs(lgt)
+                        if emission_inputs:
+                            if lumos.color_filter == 1 and emission_inputs['color']:
+                                row.prop(emission_inputs['color'], 'default_value', text="")
+                                row.separator(factor=2.0)
+                            
+                            if lumos.energy_filter == 1 and emission_inputs['strength']:
+                                row.prop(emission_inputs['strength'], 'default_value', text="")
+                                row.separator(factor=1.0)
 
 #######################################################################         
 ########################### PRESET POINT ##############################
@@ -316,6 +350,33 @@ class LUMOS_EDITOR_OT_PopUpMenu(Operator):
                                     row.separator(factor=1.0)
                                     row.prop(lgt.data, "size_y", text="Size Y")
                                     row.separator(factor=1.0)
+
+#######################################################################         
+########################## PRESET EMISSIVE ##############################
+#######################################################################
+
+        if lumos.emissive_filter:   
+            for obj in context.scene.objects:
+                if obj.type == 'MESH' and lumos.is_emissive_object(obj):
+                    if lumos.searcher(lumos.search_filter, obj.name):
+                        row = layout.row(align = True)
+                        
+                        row.alignment = 'CENTER'
+                        row.prop(obj, "name", text="", emboss = False)
+                        
+                        row.label(text="Emitor", icon='MATERIAL')
+                        row.separator(factor=1.0)
+                        
+                        # Direct access to emission properties
+                        emission_inputs = lumos.get_emission_node_inputs(obj)
+                        if emission_inputs:
+                            if lumos.color_filter == 1 and emission_inputs['color']:
+                                row.prop(emission_inputs['color'], 'default_value', text="")
+                                row.separator(factor=2.0)
+                            
+                            if lumos.energy_filter == 1 and emission_inputs['strength']:
+                                row.prop(emission_inputs['strength'], 'default_value', text="")
+                                row.separator(factor=1.0)
         
 
 #######################################################################         

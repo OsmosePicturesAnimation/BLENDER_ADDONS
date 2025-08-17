@@ -83,6 +83,7 @@ CLASSES = [
     lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Modify_Color,
     lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Modify_LocalZPosition,
     lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Tool_Toggle,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Delete_Emissive_Object,
     lumos_editor_panels.LUMOS_EDITOR_PT_PopUpMenu,
     lumos_manager_panels.LUMOS_MANAGER_PT_3DVIEW_Lumos_Manager,
     lumos_manager_panels.LUMOS_MANAGER_UL_Ui_list,
@@ -114,6 +115,7 @@ def register():
 
     bpy.types.Light.lumos_lock_light = BoolProperty(default=False, get=get_lock_transforms, set=set_lock_transforms, name="Lock light", description="Lock light : location, rotation & scale")
     bpy.types.Light.lumos_selection = BoolProperty(default=False, get=is_selected, set=set_selection)
+    bpy.types.Object.lumos_lock_object = BoolProperty(default=False, get=get_lock_transforms, set=set_lock_transforms, name="Lock object", description="Lock object : location, rotation & scale")
     bpy.types.Scene.lumos_light_collection = bpy.props.PointerProperty(type=bpy.types.Collection, name="Lights Collection", description="Select in which collection the lights will be created")
     # bpy.types.Scene.lumos_target_collection = bpy.props.PointerProperty(type=bpy.types.Collection, name="Targets Collection", description="Select in which collection the targetss will be created")
     bpy.types.Scene.lumos_lights_idx = bpy.props.IntProperty()
@@ -144,6 +146,7 @@ def unregister():
     del bpy.types.WindowManager.lumos_gizmo_active
     del bpy.types.Scene.lumos_lights_idx
     del bpy.types.Scene.reference_empty
+    del bpy.types.Object.lumos_lock_object
 
 
 if __name__ == "__main__":
