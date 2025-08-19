@@ -1,26 +1,3 @@
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTIBILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-# General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <http://www.gnu.org/licenses/>.
-
-# bl_info = {
-#     "name": "Lumos",
-#     "author": "Quentin 'Eqkoss' Sanhes",
-#     "description" : "Light manager & editor. Easy to use, be more focus on your lighting job. Simplify your work and come with extra features ",
-#     "version": (3, 0, 0),
-#     "blender": (4, 1, 0),
-#     "location": "3D View >> N-Panel >> Lumos",	
-#     "category": "Lighting",
-#     "warning": ""}
-
 ### Special thanks to Pistiwique, Jordan and the BlenderLounge Community for the HUGE help ###
 import bpy
 
@@ -64,6 +41,7 @@ CLASSES = [
     LUMOS_PREFERENCES,
     lumos_gizmo.LUMOS_GZ_Light_Color,
     lumos_editor_operators.LUMOS_EDITOR_OT_PopUpMenu,
+    lumos_editor_operators.LUMOS_MT_PropertiesFilter,
     lumos_manager_operators.LUMOS_MANAGER_OT_AddLight,
     lumos_manager_operators.LUMOS_MANAGER_OT_DeleteLight,
     lumos_manager_operators.LUMOS_MANAGER_OT_SelectLight,

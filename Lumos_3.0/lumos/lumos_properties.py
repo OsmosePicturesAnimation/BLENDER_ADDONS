@@ -1,8 +1,8 @@
 import bpy
+import bmesh
 
 from bpy.types import Panel, Menu, PropertyGroup, Operator
 from bpy.props import EnumProperty, StringProperty, BoolProperty, PointerProperty
-from .operators import lumos_manager_operators as lumop
 
 class LUMOS_Properties(PropertyGroup):
 
@@ -22,6 +22,27 @@ class LUMOS_Properties(PropertyGroup):
     #         options = {'HIDDEN'},
     #         default = False,
     #     )
+
+    def update_all_light_filter(self, context):
+        """Update callback for all_light_filter - serves as reset functionality"""
+        # Si ALL est activé ET que tous les filtres spécifiques sont déjà actifs
+        # alors on fait un reset (on désactive tout)
+        if self.all_light_filter:
+            all_specific_active = (
+                self.point_light_filter and 
+                self.sun_light_filter and 
+                self.spot_light_filter and 
+                self.area_light_filter and 
+                self.emissive_filter
+            )
+            
+            if all_specific_active:
+                # Reset: désactiver tous les filtres spécifiques
+                self.point_light_filter = False
+                self.sun_light_filter = False
+                self.spot_light_filter = False
+                self.area_light_filter = False
+                self.emissive_filter = False
         
 
     preset_enum : bpy.props.EnumProperty(
@@ -71,8 +92,9 @@ class LUMOS_Properties(PropertyGroup):
     
     all_light_filter : BoolProperty(
     name="Filter All Light",
-    description="Show all lights",
-    default = True)
+    description="Show all lights and emissives, or reset all filters when clicked again",
+    default = True,
+    update = update_all_light_filter)
     
     point_light_filter : BoolProperty(
     name="Filter Point Light",
@@ -153,6 +175,11 @@ class LUMOS_Properties(PropertyGroup):
     description="Allow filtring by searching light's name(no case sensitive)",
     default = "",
     maxlen = 50)
+    
+    sort_by_type : BoolProperty(
+    name="Sort by Type",
+    description="Sort lights by type (Point, Sun, Spot, Area, then Emissive objects)",
+    default = True)
 
     
     # Custom Search function for searching filter
@@ -318,3 +345,64 @@ class LUMOS_Properties(PropertyGroup):
                                 'type': 'PRINCIPLED'
                             }
         return None
+    
+    # Function to create an emissive object (plane with emission shader)
+    def create_emissive_object(self, context, location=(0, 0, 0), name="Emissive"):
+        """Create a plane with emission material"""
+        scn = context.scene
+        
+        # Create or get the LIGHTS collection (same as regular lights)
+        if scn.lumos_light_collection is None:
+            light_coll = bpy.data.collections.get('LIGHTS')
+            if light_coll is None:
+                light_coll = bpy.data.collections.new("LIGHTS")
+                scn.collection.children.link(light_coll)
+                
+            scn.lumos_light_collection = light_coll
+        else:
+            scn.lumos_light_collection = bpy.data.collections.get(scn.lumos_light_collection.name)
+        
+        # Create plane mesh data
+        plane_mesh = bpy.data.meshes.new(name=f"{name}")
+        
+        # Use bmesh to create plane geometry
+        bm = bmesh.new()
+        bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=2.0)
+        bm.to_mesh(plane_mesh)
+        bm.free()
+        
+        # Create object
+        plane_object = bpy.data.objects.new(name=name, object_data=plane_mesh)
+        plane_object.location = location
+        
+        # Add to LIGHTS collection
+        scn.lumos_light_collection.objects.link(plane_object)
+        
+        # Create material
+        material_name = f"{name}_Material"
+        emission_material = bpy.data.materials.new(name=material_name)
+        emission_material.use_nodes = True
+        
+        # Clear default nodes
+        emission_material.node_tree.nodes.clear()
+        
+        # Add emission shader
+        emission_node = emission_material.node_tree.nodes.new(type='ShaderNodeEmission')
+        emission_node.location = (0, 0)
+        emission_node.inputs['Color'].default_value = (1.0, 1.0, 1.0, 1.0)  # White color
+        emission_node.inputs['Strength'].default_value = 10.0  # Strength = 10
+        
+        # Add material output
+        output_node = emission_material.node_tree.nodes.new(type='ShaderNodeOutputMaterial')
+        output_node.location = (300, 0)
+        
+        # Connect emission to material output
+        emission_material.node_tree.links.new(
+            emission_node.outputs['Emission'], 
+            output_node.inputs['Surface']
+        )
+        
+        # Assign material to plane
+        plane_object.data.materials.append(emission_material)
+        
+        return plane_object

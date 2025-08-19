@@ -84,6 +84,10 @@ class LUMOS_MANAGER_PT_3DVIEW_Lumos_Manager(Panel):
         for light in LIGHTS:
             row = layout.row(align=True)
             row.operator('lumos_manager.add_light', text=f"{light.capitalize()} Light", icon=f'LIGHT_{light}').type_=light
+        
+        # Add Emissive button
+        row = layout.row(align=True)
+        row.operator('lumos_manager.add_light', text="Emissive Light", icon='MATERIAL').type_='EMISSIVE'
 
         totlig = len(lights)
         sellig = len(selligs)
@@ -299,5 +303,8 @@ class LUMOS_MANAGER_VIEW3D_MT_PIE_Light(Menu):
             #5 et 6: HAUT GAUCHE et HAUT DROITE
             op = pie.operator('lumos_manager.all_light_visibility', text="Show All", icon='HIDE_OFF').visible = False
             op = pie.operator('lumos_manager.all_light_visibility', text="Hide All", icon='HIDE_ON').visible = True
-            #7 et 8: BAS GAUCHE et BAS DROITE
+            #7: BAS GAUCHE - Emissive Object
+            op = pie.operator('lumos_manager.add_light', text="Emissive Object", icon='MATERIAL')
+            op.type_='EMISSIVE'
+            #8: BAS DROITE
             pie.prop(lumos, 'light_origin', text="text", expand=True)

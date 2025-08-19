@@ -25,27 +25,42 @@ class LUMOS_MANAGER_OT_AddLight(Operator):
         lumos = context.window_manager.lumos
         scn = context.scene
 
-        #Créé la collection des lights si elle n'existe pas encore
-        if scn.lumos_light_collection is None:
-            light_coll = bpy.data.collections.get('LIGHTS')
-            if light_coll is None:
-                light_coll = bpy.data.collections.new("LIGHTS")
-                scn.collection.children.link(light_coll)
-                
-            scn.lumos_light_collection = light_coll
-        else:
-            scn.lumos_light_collection = bpy.data.collections.get(bpy.context.scene.lumos_light_collection.name)
+        # Check if we're creating an emissive object
+        if self.type_ == 'EMISSIVE':
+            # Create emissive object using the new function
+            loc = (0, 0, 0)
+            if lumos.light_origin == 'CURSOR':
+                loc = scn.cursor.location
             
-        # Créé la light
-        loc = (0, 0, 0)
-        if lumos.light_origin == 'CURSOR':
-            loc = scn.cursor.location
-        light_data = bpy.data.lights.new(name=f"{self.type_}".capitalize(), type=self.type_)
-        light_object = bpy.data.objects.new(name=light_data.name, object_data=light_data)
-        scn.lumos_light_collection.objects.link(light_object)
-        bpy.context.view_layer.objects.active = light_object
-        light_object.location = loc
-        return{'FINISHED'}
+            # Create the emissive object
+            emissive_object = lumos.create_emissive_object(context, location=loc, name="Emissive")
+            
+            # Set as active object
+            bpy.context.view_layer.objects.active = emissive_object
+            return{'FINISHED'}
+        else:
+            # Original light creation logic
+            #Créé la collection des lights si elle n'existe pas encore
+            if scn.lumos_light_collection is None:
+                light_coll = bpy.data.collections.get('LIGHTS')
+                if light_coll is None:
+                    light_coll = bpy.data.collections.new("LIGHTS")
+                    scn.collection.children.link(light_coll)
+                    
+                scn.lumos_light_collection = light_coll
+            else:
+                scn.lumos_light_collection = bpy.data.collections.get(bpy.context.scene.lumos_light_collection.name)
+                
+            # Créé la light
+            loc = (0, 0, 0)
+            if lumos.light_origin == 'CURSOR':
+                loc = scn.cursor.location
+            light_data = bpy.data.lights.new(name=f"{self.type_}".capitalize(), type=self.type_)
+            light_object = bpy.data.objects.new(name=light_data.name, object_data=light_data)
+            scn.lumos_light_collection.objects.link(light_object)
+            bpy.context.view_layer.objects.active = light_object
+            light_object.location = loc
+            return{'FINISHED'}
         
 #####################   DELETE LIGHT   ###################
 class LUMOS_MANAGER_OT_DeleteLight(Operator):
