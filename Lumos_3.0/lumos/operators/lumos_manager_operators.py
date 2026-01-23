@@ -8,6 +8,24 @@ from bpy.types import Panel, Menu, PropertyGroup, Operator, UIList, WorkSpaceToo
 from bpy.props import EnumProperty, PointerProperty, StringProperty, BoolProperty
 from pathlib import Path
 
+from ..lumos_properties import ensure_light_editable, is_light_data_linked
+
+
+def get_light_to_surface_distance(context, light, default_distance=4.0):
+    """
+    Calculate the distance from a light to the surface it's pointing at.
+    Returns the default_distance if no surface is hit.
+    """
+    depsgraph = context.evaluated_depsgraph_get()
+    direction = light.matrix_world.to_quaternion() @ Vector((0, 0, -1))
+    result, location, normal, index, obj, matrix = context.scene.ray_cast(
+        depsgraph, light.location, direction
+    )
+    if result:
+        return (light.location - location).length
+    return default_distance
+
+
 #####################   AJOUTER LIGHT   ###################
 class LUMOS_MANAGER_OT_AddLight(Operator):
     bl_idname = 'lumos_manager.add_light'
@@ -241,10 +259,11 @@ class LUMOS_MANAGER_OT_Light_Normals_Position(bpy.types.Operator):
         # Initialize variables
         self._handle = None
         self.mouse_pos = (0, 0)
-        
+
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, window=context.window)
         if context.space_data.type == 'VIEW_3D' and context.active_object and context.active_object.type == 'LIGHT':
+            self.initial_distance = get_light_to_surface_distance(context, context.active_object)
             context.window.cursor_modal_set('CROSSHAIR')
             wm.modal_handler_add(self)
             return {'RUNNING_MODAL'}
@@ -268,9 +287,8 @@ class LUMOS_MANAGER_OT_Light_Normals_Position(bpy.types.Operator):
         )
 
         if result:
-            distance = 4
             light = context.active_object
-            light.location = location + normal * distance
+            light.location = location + normal * self.initial_distance
             light.rotation_euler = normal.to_track_quat('Z', 'Y').to_euler()
         return {'FINISHED'}
 
@@ -278,7 +296,7 @@ class LUMOS_MANAGER_OT_Light_Normals_Position(bpy.types.Operator):
         wm = context.window_manager
         wm.event_timer_remove(self._timer)
         context.window.cursor_modal_restore()
-        return {'CANCELLED'}    
+        return {'CANCELLED'}
 
 #####################  MODAL RAYCATS FUNCTION TO PLACE LIGHT BASED ON ITS REFLECTION ###################
 
@@ -296,8 +314,6 @@ class LUMOS_MANAGER_OT_Light_Reflection_Position(bpy.types.Operator):
         if not context.active_object or context.active_object.type != 'LIGHT':
             return False
         return True
-
-        self.initial_distance = None
 
     def modal(self, context, event):
         if context.active_object.type == 'LIGHT':
@@ -323,23 +339,23 @@ class LUMOS_MANAGER_OT_Light_Reflection_Position(bpy.types.Operator):
             return {'RUNNING_MODAL'}
         else:
             return self.cancel(context)
-        
 
     def invoke(self, context, event):
         # Initialize variables
         self._handle = None
         self.mouse_pos = (0, 0)
-        
+
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, window=context.window)
         if context.space_data.type == 'VIEW_3D' and context.active_object and context.active_object.type == 'LIGHT':
+            self.initial_distance = get_light_to_surface_distance(context, context.active_object)
             context.window.cursor_modal_set('CROSSHAIR')
             wm.modal_handler_add(self)
             return {'RUNNING_MODAL'}
         else:
             self.report({'WARNING'}, "No light object selected or not in View3D space")
             return {'CANCELLED'}
-        
+
     def execute(self, context):
         if not context.active_object or context.active_object.type != 'LIGHT':
             return {'CANCELLED'}
@@ -355,18 +371,17 @@ class LUMOS_MANAGER_OT_Light_Reflection_Position(bpy.types.Operator):
 
         if result:
             light = context.active_object
-            distance = 4
             incident_vec = (ray_origin - location).normalized()
             reflection_vec = incident_vec.reflect(normal)
-            light.location = location - reflection_vec * distance
+            light.location = location - reflection_vec * self.initial_distance
             light.rotation_euler = (-reflection_vec).to_track_quat('Z', 'Y').to_euler()
         return {'FINISHED'}
-    
+
     def cancel(self, context):
         wm = context.window_manager
         wm.event_timer_remove(self._timer)
         context.window.cursor_modal_restore()
-        return {'CANCELLED'}   
+        return {'CANCELLED'}
 
 
 #####################  MODAL RAYCATS FUNCTION TO PLACE LIGHT BASED ON THE SHADOW OR THE TARGETED OBJECT ###################
@@ -387,8 +402,6 @@ class LUMOS_MANAGER_OT_Light_Target_Position(bpy.types.Operator):
             return False
         return True
 
-        self._light_object = None
-
     def modal(self, context, event):
         if event.type in {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
             return {'PASS_THROUGH'}
@@ -404,6 +417,7 @@ class LUMOS_MANAGER_OT_Light_Target_Position(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
+        self._light_object = None
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, window=context.window)
         context.window.cursor_modal_set('CROSSHAIR')
@@ -487,13 +501,14 @@ class LUMOS_MANAGER_OT_Light_Shadow_Position(bpy.types.Operator):
     def invoke(self, context, event):
         # Initialize variables
         self.mouse_pos = (0, 0)
-        
+
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, window=context.window)
         context.window.cursor_modal_set('CROSSHAIR')
         wm.modal_handler_add(self)
         self._light_object = context.active_object
         self._reference_object = context.scene.reference_empty
+        self.initial_distance = get_light_to_surface_distance(context, context.active_object)
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
@@ -533,8 +548,7 @@ class LUMOS_MANAGER_OT_Light_Shadow_Position(bpy.types.Operator):
         direction_to_shadow = reference_object.location - shadow_location
         direction_to_shadow.normalize()
 
-        distance = 4
-        light_position = reference_object.location + direction_to_shadow * distance
+        light_position = reference_object.location + direction_to_shadow * self.initial_distance
         light.location = light_position
 
         direction_to_shadow = light.location - shadow_location
@@ -714,16 +728,22 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Intensity(bpy.types.Operator):
 
     def invoke(self, context, event):
         lumos = context.window_manager.lumos
-        
+
         # Initialize all variables
         self.start_mouse_x = 0
         self.initial_intensity = 0
         self.incremented_value = 10
         self.is_emissive_object = False
         self.emission_inputs = None
-        
+
         if context.object:
             if context.object.type == 'LIGHT':
+                # Check if light is linked and handle accordingly
+                if is_light_data_linked(context.object):
+                    success, light_data = ensure_light_editable(context.object, self)
+                    if not success:
+                        return {'CANCELLED'}
+
                 # Handle light objects
                 self.is_emissive_object = False
                 self.start_mouse_x = event.mouse_x
@@ -732,12 +752,12 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Intensity(bpy.types.Operator):
                 context.window_manager.modal_handler_add(self)
                 self.report({'INFO'}, "Move horizontally to modify the intensity")
                 return {'RUNNING_MODAL'}
-                
+
             elif context.object.type == 'MESH' and lumos.is_emissive_object(context.object):
                 # Handle emissive objects
                 self.is_emissive_object = True
                 self.emission_inputs = lumos.get_emission_node_inputs(context.object)
-                
+
                 if self.emission_inputs and self.emission_inputs['strength']:
                     self.start_mouse_x = event.mouse_x
                     self.initial_intensity = self.emission_inputs['strength'].default_value
@@ -748,11 +768,11 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Intensity(bpy.types.Operator):
                 else:
                     self.report({'WARNING'}, "No emission strength found on this object")
                     return {'CANCELLED'}
-        
+
         context.window.cursor_modal_restore()
         self.report({'WARNING'}, "No active light or emissive object found")
         return {'CANCELLED'}
-        
+
 
 ######################## MODIFY COLOR TOOL FOR LIGHT EDIT ###############################
 
@@ -870,39 +890,45 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Color(bpy.types.Operator):
 
         if context.object:
             if context.object.type == 'LIGHT':
+                # Check if light is linked and handle accordingly
+                if is_light_data_linked(context.object):
+                    success, light_data = ensure_light_editable(context.object, self)
+                    if not success:
+                        return {'CANCELLED'}
+
                 # Handle light objects
                 self.is_emissive_object = False
                 wm.lumos_gizmo_active = True
-                
+
                 self.start_mouse_x = event.mouse_x
                 self.start_mouse_y = event.mouse_y
-                
+
                 rgb = context.object.data.color
                 hsv = colorsys.rgb_to_hsv(rgb[0], rgb[1], rgb[2])
                 self.initial_hue, self.initial_saturation, self.initial_value = hsv
-                
+
                 bpy.ops.wm.tool_set_by_id(name="LUMOS_GIZMOGROUP_circle")
                 context.window.cursor_modal_set('SCROLL_XY')
                 wm.modal_handler_add(self)
                 self.report({'INFO'}, "Horizontal modify Hue, Vertical modify Saturation")
                 return {'RUNNING_MODAL'}
-                
+
             elif context.object.type == 'MESH' and lumos.is_emissive_object(context.object):
                 # Handle emissive objects
                 self.is_emissive_object = True
                 self.emission_inputs = lumos.get_emission_node_inputs(context.object)
-                
+
                 if self.emission_inputs and self.emission_inputs['color']:
                     wm.lumos_gizmo_active = True
-                    
+
                     self.start_mouse_x = event.mouse_x
                     self.start_mouse_y = event.mouse_y
-                    
+
                     # Get current emission color
                     rgb = self.emission_inputs['color'].default_value[:3]
                     hsv = colorsys.rgb_to_hsv(rgb[0], rgb[1], rgb[2])
                     self.initial_hue, self.initial_saturation, self.initial_value = hsv
-                    
+
                     context.window.cursor_modal_set('SCROLL_XY')
                     wm.modal_handler_add(self)
                     self.report({'INFO'}, "Horizontal modify Hue, Vertical modify Saturation")
@@ -910,10 +936,10 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_Color(bpy.types.Operator):
                 else:
                     self.report({'WARNING'}, "No emission color found on this object")
                     return {'CANCELLED'}
-        
+
         self.report({'WARNING'}, "No active light or emissive object found")
         return {'CANCELLED'}
-        
+
 
 ######################## MODIFY Z POSITION TOOL FOR LIGHT EDIT ###############################
 
@@ -962,6 +988,12 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_LocalZPosition(bpy.types.Operator):
     def invoke(self, context, event):
         lumos = context.window_manager.lumos
         if context.object and context.object.type == 'LIGHT':
+            # Check if light is linked and handle accordingly (for preserve_energy which modifies light.data.energy)
+            if lumos.preserve_energy and is_light_data_linked(context.object):
+                success, light_data = ensure_light_editable(context.object, self)
+                if not success:
+                    return {'CANCELLED'}
+
             self.start_mouse_x = event.mouse_x
             self.start_location = context.object.location.copy()
             if lumos.preserve_energy:
@@ -971,7 +1003,7 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_LocalZPosition(bpy.types.Operator):
                 depsgraph = context.evaluated_depsgraph_get()
                 direction = context.object.matrix_world.to_quaternion() @ Vector((0, 0, -1))
                 result, location, normal, index, obj, matrix = context.scene.ray_cast(depsgraph, context.object.location, direction)
-                
+
                 if result:
                     self.hit_location = location
                     self.initial_distance = (context.object.location - self.hit_location).length  # Store the initial distance
@@ -987,7 +1019,8 @@ class LUMOS_MANAGER_OT_Light_Edit_Modify_LocalZPosition(bpy.types.Operator):
             context.window.cursor_modal_restore()
             self.report({'WARNING'}, "No active light object found")
             return {'CANCELLED'}
-        
+
+
 ######################## OPERATOR TO CONTROL THE TOOL TOGGLE (L) ###############################
 
 class LUMOS_MANAGER_OT_Light_Edit_Tool_Toggle(bpy.types.Operator):
