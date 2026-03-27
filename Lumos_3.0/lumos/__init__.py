@@ -6,29 +6,58 @@ from bpy.types import Panel, Menu, PropertyGroup, Operator, WorkSpaceTool
 from bpy.props import EnumProperty, StringProperty, BoolProperty, PointerProperty
 
 from .lumos_preferences import LUMOS_PREFERENCES, assign_custom_keymaps, remove_custom_keymaps, remove_default_keymaps
-from .lumos_properties import LUMOS_Properties
+from .lumos_properties import (
+    LUMOS_Properties,
+    LUMOS_OT_LinkedLightDialog,
+    LUMOS_OT_EditLightColor,
+    LUMOS_OT_EditLightEnergy,
+    LUMOS_OT_ToggleLightLock,
+    LUMOS_OT_EditLightMaxBounces,
+)
 from .lumos_gizmo import *
 from .operators import lumos_editor_operators, lumos_manager_operators
 from .panels import lumos_editor_panels, lumos_manager_panels
 
 def is_locked(obj):
+    if obj is None:
+        return False
     return all((all(obj.lock_location), all(obj.lock_rotation), all(obj.lock_scale)))
 
-def get_lock_transforms(self):
+def _find_object_for_datablock(self):
+    """Find the Object that owns this data-block (Light or Object).
+    When self is a Light, self.name may differ from the Object name,
+    so we search through scene objects to find the owner."""
+    # If self is already an Object, look it up directly
     ob = bpy.context.scene.objects.get(self.name)
+    if ob is not None:
+        return ob
+    # self might be a Light data-block: find the Object that uses it
+    for ob in bpy.context.scene.objects:
+        if ob.data and ob.data == self:
+            return ob
+    return None
+
+def get_lock_transforms(self):
+    ob = _find_object_for_datablock(self)
     return is_locked(ob)
 
 def set_lock_transforms(self, value):
-    ob = bpy.context.scene.objects.get(self.name)
+    ob = _find_object_for_datablock(self)
+    if ob is None:
+        return
     for attr in ("lock_location", "lock_rotation", "lock_scale"):
         setattr(ob, attr, (value, value, value))
-        
+
 def is_selected(self):
-    ob = bpy.context.scene.objects.get(self.name)
+    ob = _find_object_for_datablock(self)
+    if ob is None:
+        return False
     return ob.select_get()
 
 def set_selection(self, value):
-    ob = bpy.context.scene.objects.get(self.name)
+    ob = _find_object_for_datablock(self)
+    if ob is None:
+        return
     ob.select_set(state=value)
 
 def menu_func(self, context):
@@ -39,6 +68,11 @@ def menu_func(self, context):
 CLASSES = [
     LUMOS_Properties,
     LUMOS_PREFERENCES,
+    LUMOS_OT_LinkedLightDialog,
+    LUMOS_OT_EditLightColor,
+    LUMOS_OT_EditLightEnergy,
+    LUMOS_OT_ToggleLightLock,
+    LUMOS_OT_EditLightMaxBounces,
     lumos_gizmo.LUMOS_GZ_Light_Color,
     lumos_editor_operators.LUMOS_EDITOR_OT_PopUpMenu,
     lumos_editor_operators.LUMOS_MT_PropertiesFilter,
@@ -85,7 +119,7 @@ def register():
 
     bpy.types.WindowManager.lumos = PointerProperty(type=LUMOS_Properties)
     bpy.types.WindowManager.lumos_gizmo_active = bpy.props.BoolProperty(name="Lumos Gizmo Active", default=False)
-
+    bpy.types.WindowManager.lumos_pending_linked_light = bpy.props.StringProperty(name="Pending Linked Light", default="")
 
     # Add keymaps based on preferences
     prefs = bpy.context.preferences.addons[__package__].preferences
@@ -122,6 +156,7 @@ def unregister():
 
     del bpy.types.WindowManager.lumos
     del bpy.types.WindowManager.lumos_gizmo_active
+    del bpy.types.WindowManager.lumos_pending_linked_light
     del bpy.types.Scene.lumos_lights_idx
     del bpy.types.Scene.reference_empty
     del bpy.types.Object.lumos_lock_object
