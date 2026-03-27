@@ -1,0 +1,166 @@
+### Special thanks to Pistiwique, Jordan and the BlenderLounge Community for the HUGE help ###
+import bpy
+
+# from . import auto_reaload #Custom script to automatically reaload the addon
+from bpy.types import Panel, Menu, PropertyGroup, Operator, WorkSpaceTool
+from bpy.props import EnumProperty, StringProperty, BoolProperty, PointerProperty
+
+from .lumos_preferences import LUMOS_PREFERENCES, assign_custom_keymaps, remove_custom_keymaps, remove_default_keymaps
+from .lumos_properties import (
+    LUMOS_Properties,
+    LUMOS_OT_LinkedLightDialog,
+    LUMOS_OT_EditLightColor,
+    LUMOS_OT_EditLightEnergy,
+    LUMOS_OT_ToggleLightLock,
+    LUMOS_OT_EditLightMaxBounces,
+)
+from .lumos_gizmo import *
+from .operators import lumos_editor_operators, lumos_manager_operators
+from .panels import lumos_editor_panels, lumos_manager_panels
+
+def is_locked(obj):
+    if obj is None:
+        return False
+    return all((all(obj.lock_location), all(obj.lock_rotation), all(obj.lock_scale)))
+
+def _find_object_for_datablock(self):
+    """Find the Object that owns this data-block (Light or Object).
+    When self is a Light, self.name may differ from the Object name,
+    so we search through scene objects to find the owner."""
+    # If self is already an Object, look it up directly
+    ob = bpy.context.scene.objects.get(self.name)
+    if ob is not None:
+        return ob
+    # self might be a Light data-block: find the Object that uses it
+    for ob in bpy.context.scene.objects:
+        if ob.data and ob.data == self:
+            return ob
+    return None
+
+def get_lock_transforms(self):
+    ob = _find_object_for_datablock(self)
+    return is_locked(ob)
+
+def set_lock_transforms(self, value):
+    ob = _find_object_for_datablock(self)
+    if ob is None:
+        return
+    for attr in ("lock_location", "lock_rotation", "lock_scale"):
+        setattr(ob, attr, (value, value, value))
+
+def is_selected(self):
+    ob = _find_object_for_datablock(self)
+    if ob is None:
+        return False
+    return ob.select_get()
+
+def set_selection(self, value):
+    ob = _find_object_for_datablock(self)
+    if ob is None:
+        return
+    ob.select_set(state=value)
+
+def menu_func(self, context):
+    self.layout.operator(lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Modify_LocalZPosition.bl_idname)
+    self.layout.operator(lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Modify_Color.bl_idname)
+    self.layout.operator(lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Modify_Intensity.bl_idname) 
+
+CLASSES = [
+    LUMOS_Properties,
+    LUMOS_PREFERENCES,
+    LUMOS_OT_LinkedLightDialog,
+    LUMOS_OT_EditLightColor,
+    LUMOS_OT_EditLightEnergy,
+    LUMOS_OT_ToggleLightLock,
+    LUMOS_OT_EditLightMaxBounces,
+    lumos_gizmo.LUMOS_GZ_Light_Color,
+    lumos_editor_operators.LUMOS_EDITOR_OT_PopUpMenu,
+    lumos_editor_operators.LUMOS_MT_PropertiesFilter,
+    lumos_manager_operators.LUMOS_MANAGER_OT_AddLight,
+    lumos_manager_operators.LUMOS_MANAGER_OT_DeleteLight,
+    lumos_manager_operators.LUMOS_MANAGER_OT_SelectLight,
+    lumos_manager_operators.LUMOS_MANAGER_OT_LookThoughLight,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Light_Visibility,
+    lumos_manager_operators.LUMOS_MANAGER_OT_All_Light_Visibility,
+    lumos_manager_operators.LUMOS_MANAGER_OT_IsolateLight,
+    # lumos_manager_operators.LUMOS_MANAGER_OT_Create_Target,
+    # lumos_manager_operators.LUMOS_MANAGER_OT_Delete_Target,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Light_Normals_Position,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Light_Reflection_Position,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Light_Target_Position,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Light_Shadow_Position,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Mode_Switcher,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Manager,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Modify_Intensity,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Modify_Color,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Modify_LocalZPosition,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Light_Edit_Tool_Toggle,
+    lumos_manager_operators.LUMOS_MANAGER_OT_Delete_Emissive_Object,
+    lumos_editor_panels.LUMOS_EDITOR_PT_PopUpMenu,
+    lumos_manager_panels.LUMOS_MANAGER_PT_3DVIEW_Lumos_Manager,
+    lumos_manager_panels.LUMOS_MANAGER_UL_Ui_list,
+    lumos_manager_panels.LUMOS_MANAGER_PT_3DVIEW_Lumos_Manager_Modificator,
+    lumos_manager_panels.LUMOS_MANAGER_VIEW3D_MT_PIE_Light
+]
+
+TOOLS = [
+    lumos_manager_operators.LUMOS_MANAGER_TL_3DVIEW_Lumos_Light_Edit_Tool,
+]
+
+# auto_reaload.init() #Fonction to call the reaload
+
+
+def register():
+    for cls in CLASSES:
+        bpy.utils.register_class(cls)
+    
+    for tls in TOOLS:
+        bpy.utils.register_tool(tls)
+
+    bpy.types.WindowManager.lumos = PointerProperty(type=LUMOS_Properties)
+    bpy.types.WindowManager.lumos_gizmo_active = bpy.props.BoolProperty(name="Lumos Gizmo Active", default=False)
+    bpy.types.WindowManager.lumos_pending_linked_light = bpy.props.StringProperty(name="Pending Linked Light", default="")
+
+    # Add keymaps based on preferences
+    prefs = bpy.context.preferences.addons[__package__].preferences
+    assign_custom_keymaps(prefs.use_keymaps_bool)
+
+    bpy.types.Light.lumos_lock_light = BoolProperty(default=False, get=get_lock_transforms, set=set_lock_transforms, name="Lock light", description="Lock light : location, rotation & scale")
+    bpy.types.Light.lumos_selection = BoolProperty(default=False, get=is_selected, set=set_selection)
+    bpy.types.Object.lumos_lock_object = BoolProperty(default=False, get=get_lock_transforms, set=set_lock_transforms, name="Lock object", description="Lock object : location, rotation & scale")
+    bpy.types.Scene.lumos_light_collection = bpy.props.PointerProperty(type=bpy.types.Collection, name="Lights Collection", description="Select in which collection the lights will be created")
+    # bpy.types.Scene.lumos_target_collection = bpy.props.PointerProperty(type=bpy.types.Collection, name="Targets Collection", description="Select in which collection the targetss will be created")
+    bpy.types.Scene.lumos_lights_idx = bpy.props.IntProperty()
+    bpy.types.Scene.reference_empty = bpy.props.PointerProperty(
+        name="Reference Empty",
+        type=bpy.types.Object,
+        description="Empty object used as reference for placing light"
+    )
+    bpy.types.VIEW3D_MT_object.append(menu_func)
+
+
+def unregister():
+    # Unregister classes in reverse order
+    for cls in reversed(CLASSES):
+        bpy.utils.unregister_class(cls)
+
+    # Unregister tools in reverse order
+    for tls in reversed(TOOLS):
+        bpy.utils.unregister_tool(tls)
+
+    # Remove keymaps
+    remove_custom_keymaps()
+    remove_default_keymaps()
+
+    bpy.types.VIEW3D_MT_object.remove(menu_func)
+
+    del bpy.types.WindowManager.lumos
+    del bpy.types.WindowManager.lumos_gizmo_active
+    del bpy.types.WindowManager.lumos_pending_linked_light
+    del bpy.types.Scene.lumos_lights_idx
+    del bpy.types.Scene.reference_empty
+    del bpy.types.Object.lumos_lock_object
+
+
+if __name__ == "__main__":
+	register()
